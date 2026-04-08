@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>iRECON</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css?v=2.5"/>
+</head>
+<body>
+
+<div class="bg-grid" aria-hidden="true"></div>
+<div class="bg-noise" aria-hidden="true"></div>
+
+<!-- Header -->
+<header class="app-header">
+  <div class="header-inner">
+    <div class="logo-group">
+      <div class="logo-icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <!-- Glow for red phase -->
+            <filter id="dot-glow" x="-120%" y="-120%" width="340%" height="340%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="2.2" result="blur"/>
+              <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <!-- Glow for outer ring -->
+            <filter id="ring-glow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="blur"/>
+              <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+
+          <!-- Outer solid ring (static cyan) — was dashed -->
+          <circle cx="14" cy="14" r="12" stroke="#22d3ee" stroke-width="1.5" filter="url(#ring-glow)"/>
+          <!-- Inner ring (static cyan) -->
+          <circle cx="14" cy="14" r="7" stroke="#22d3ee" stroke-width="1.5"/>
+
+          <!-- Cardinal tick marks (static cyan) -->
+          <line x1="14" y1="2"  x2="14" y2="6"  stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="14" y1="22" x2="14" y2="26" stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="2"  y1="14" x2="6"  y2="14" stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="22" y1="14" x2="26" y2="14" stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round"/>
+
+          <!--
+            Timing for a 4s cycle:
+              0.00 – 0.20  RED on   (solid, glowing)
+              0.20 – 0.35  RED off  (fade out)
+              0.35 – 0.50  dark gap
+              0.50 – 0.70  GREEN on (solid, glowing)
+              0.70 – 0.85  GREEN off (fade out)
+              0.85 – 1.00  dark gap back to start
+          -->
+
+          <!-- Glow halo — expands outward when lit -->
+          <circle cx="14" cy="14" r="2.5" fill="none" filter="url(#dot-glow)">
+            <!-- colour follows dot: red → off → green → off -->
+            <animate attributeName="stroke"
+              values="#f87171;#f87171;transparent;transparent;#4ade80;#4ade80;transparent;transparent"
+              keyTimes="0;0.20;0.35;0.50;0.50;0.70;0.85;1"
+              dur="4s" repeatCount="indefinite" calcMode="discrete"/>
+            <!-- halo radius expands on lit, collapses when dark -->
+            <animate attributeName="r"
+              values="2.5;5;2.5;2.5;2.5;5;2.5;2.5"
+              keyTimes="0;0.10;0.35;0.50;0.50;0.60;0.85;1"
+              dur="4s" repeatCount="indefinite"/>
+            <!-- opacity: bright on → fades → off → bright on → fades → off -->
+            <animate attributeName="opacity"
+              values="0.85;0.1;0;0;0.85;0.1;0;0"
+              keyTimes="0;0.20;0.35;0.50;0.50;0.70;0.85;1"
+              dur="4s" repeatCount="indefinite"/>
+            <animate attributeName="stroke-width"
+              values="1.2;1.2;1.2;1.2;1.2;1.2;1.2;1.2"
+              keyTimes="0;0.20;0.35;0.50;0.50;0.70;0.85;1"
+              dur="4s" repeatCount="indefinite"/>
+          </circle>
+
+          <!-- Centre dot — blinks red then green with glow filter -->
+          <circle cx="14" cy="14" r="2.5" filter="url(#dot-glow)">
+            <animate attributeName="fill"
+              values="#f87171;#f87171;#33111100;#33111100;#4ade80;#4ade80;#33111100;#33111100"
+              keyTimes="0;0.20;0.35;0.50;0.50;0.70;0.85;1"
+              dur="4s" repeatCount="indefinite" calcMode="discrete"/>
+            <animate attributeName="opacity"
+              values="1;1;0.15;0.05;1;1;0.15;0.05"
+              keyTimes="0;0.20;0.35;0.50;0.50;0.70;0.85;1"
+              dur="4s" repeatCount="indefinite"/>
+          </circle>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-title">iREC<span class="logo-blink-box">&#x25A0;</span>N</div>
+        <div class="logo-sub">Contextual Infrastructure Intelligence</div>
+      </div>
+    </div>
+    <div class="header-badges">
+      <button class="badge-pill badge-live-calls" id="liveCallsBtn" onclick="toggleLiveCalls()">
+        <span class="live-calls-dot" id="liveCallsDot"></span>
+        <span id="liveCallsLabel">No Data Stored</span>
+      </button>
+      <div class="badge-pill badge-analyzed-in hidden" id="analyzedInBadge">
+        <span class="analyzed-in-icon">⏱</span>
+        <span id="analyzedInLabel">Analyzed in: --</span>
+      </div>
+      <button class="badge-pill badge-profile" id="profileBtn" onclick="toggleProfilePanel()" title="Analyst Profile">
+        <span class="profile-dot" id="profileDot"></span>
+        <span id="profileBtnLabel">Profile</span>
+      </button>
+      <button class="score-info-btn" onclick="toggleScoreModal()">&#x2696; Scoring Guide</button>
+    </div>
+
+    <!-- Live Calls Panel -->
+    <div id="liveCallsPanel" class="live-calls-panel hidden" role="dialog" aria-label="Live Calls">
+      <div class="live-calls-header">
+        <div>
+          <span class="live-calls-title">REQUESTS MADE</span>
+          <span class="live-calls-session-badge" id="liveCallsSessionBadge"></span>
+        </div>
+        <button class="api-counter-close" onclick="toggleLiveCalls()" aria-label="Close">&#x2715;</button>
+      </div>
+      <div id="liveCallsBody" class="live-calls-body">
+        <div class="live-calls-idle">
+          <div class="live-calls-idle-icon">&#x1F6E1;</div>
+          <div>Waiting for analysis&hellip;</div>
+          <div style="font-size:10px;margin-top:4px;color:var(--text-3)">Click Analyze to see live calls</div>
+        </div>
+      </div>
+    </div>
+
+
+  <!-- Profile Panel -->
+    <div id="profilePanel" class="profile-panel hidden" role="dialog" aria-label="Analyst Profile">
+      <div class="profile-panel-header">
+        <span class="profile-panel-title">ANALYST PROFILE</span>
+        <button class="api-counter-close" onclick="toggleProfilePanel()" aria-label="Close">&#x2715;</button>
+      </div>
+
+      <!-- Active profile bar -->
+      <div class="profile-active-bar" id="profileActiveBar">
+        <div class="profile-active-indicator">
+          <span class="profile-active-dot" id="profileActiveDot"></span>
+          <span id="profileActiveName">No profile selected</span>
+        </div>
+        <button class="profile-switch-btn" onclick="showProfileSelector()">Switch</button>
+      </div>
+
+
+      <div class="profile-action-row">
+        <button class="profile-btn-secondary" onclick="showProfileSelector()">&#x2630; All Profiles</button>
+        <button class="profile-btn-primary" onclick="showCreateProfile()">&#x2B; New Profile</button>
+      </div>
+    </div>
+
+  </div>
+</header>
+
+<!-- Profile Modal — outside header so position:fixed works correctly -->
+<div id="profileModal" class="profile-modal-overlay hidden" onclick="if(event.target===this)closeProfileModal()">
+  <div class="profile-modal">
+    <div class="profile-modal-header">
+      <span class="profile-modal-title" id="profileModalTitle">SELECT PROFILE</span>
+      <button class="api-counter-close" onclick="closeProfileModal()" aria-label="Close">&#x2715;</button>
+    </div>
+    <div id="profileModalBody" class="profile-modal-body">
+      <!-- injected by JS -->
+    </div>
+  </div>
+</div>
+
+<main class="main-content">
+
+  <!-- Search panel -->
+  <section class="search-panel glass-card">
+    <div class="search-label">Indicator of Compromise / Observable</div>
+
+    <!-- No-profile warning banner — hidden when profile is active -->
+    <div id="noProfileBanner" class="no-profile-banner">
+      <span class="no-profile-icon">&#x1F512;</span>
+      <span class="no-profile-text">No analyst profile selected &mdash; analysis is disabled</span>
+      <button class="no-profile-btn" onclick="showProfileSelector()">Select Profile</button>
+    </div>
+
+    <!-- Mode toggle -->
+    <div class="mode-toggle-row">
+      <button class="mode-btn active" id="modeSingle" onclick="setMode('single')">Single IOC</button>
+      <button class="mode-btn" id="modeBulk" onclick="setMode('bulk')">Bulk Analysis</button>
+    </div>
+
+    <!-- Single mode -->
+    <div id="singleMode">
+      <div class="search-row">
+        <div class="input-wrap">
+          <div class="input-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+          </div>
+          <input id="queryInput" type="text" class="search-input"
+            placeholder="IP address &middot; Domain &middot; URL &middot; File hash (MD5/SHA1/SHA256)"
+            autocomplete="off" spellcheck="false" autocorrect="off"/>
+          <div id="inputTypeTag" class="input-type-tag hidden"></div>
+        </div>
+        <button id="lookupBtn" class="lookup-btn" onclick="runLookup()">
+          <span class="btn-text">Analyze</span>
+          <span class="btn-icon">&#x2192;</span>
+        </button>
+      </div>
+      <div class="search-hints">
+        <span class="hint">e.g. 8.8.8.8</span><span class="hint-sep">&middot;</span>
+        <span class="hint">malware.example.com</span><span class="hint-sep">&middot;</span>
+        <span class="hint">https://phish.site/login</span><span class="hint-sep">&middot;</span>
+        <span class="hint">d41d8cd98f00b204e9800998ecf8427e</span>
+      </div>
+    </div>
+
+    <!-- Bulk mode -->
+    <div id="bulkMode" class="hidden">
+      <div class="bulk-hint">One IOC per line &mdash; mix of IPs, domains, URLs, and hashes supported</div>
+      <textarea id="bulkInput" class="bulk-textarea" rows="6"
+        placeholder="8.8.8.8&#10;malware.example.com&#10;https://phish.site/login&#10;d41d8cd98f00b204e9800998ecf8427e&#10;1.2.3.4"></textarea>
+      <div class="bulk-actions">
+        <span id="bulkCount" class="bulk-count"></span>
+        <button id="bulkBtn" class="lookup-btn" onclick="runBulkLookup()">
+          <span class="btn-text">Analyze All</span>
+          <span class="btn-icon">&#x2192;</span>
+        </button>
+      </div>
+      <div class="bulk-mode-tip">
+        <span class="bulk-mode-tip-icon">&#x2139;</span>
+        <span>Bulk mode runs fast infrastructure scoring: VT &middot; OTX &middot; AbuseIPDB &middot; Domain Age &middot; TLD &middot; Entropy &middot; URL Heuristics &middot; ASN &middot; TLS &middot; Subdomain CT logs.
+        Deep modules (redirect chain, QR decoding, ICS parsing) run only in Single IOC or Email Investigation mode.</span>
+      </div>
+    </div>
+
+    <!-- Email toggle -->
+    <div class="email-toggle-row">
+      <button class="email-toggle-btn" onclick="toggleEmailMode()" id="emailToggleBtn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+        </svg>
+        Analyze Email Headers instead
+      </button>
+    </div>
+    <div id="emailPanel" class="email-panel hidden">
+
+      <!-- Header textarea -->
+      <div class="email-input-label">Paste Email Headers or Upload .eml File</div>
+      <textarea id="emailInput" class="email-textarea" rows="7"
+        placeholder="Paste raw email headers here..."></textarea>
+
+      <!-- EML upload -->
+      <div class="email-or-divider"><span>OR</span></div>
+      <div class="eml-upload-row">
+        <label class="eml-upload-label">Upload Email File <span class="gateway-chain-optional">(.eml)</span></label>
+        <label class="eml-file-btn" for="emlFileInput">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Choose File
+        </label>
+        <input id="emlFileInput" type="file" accept=".eml" class="eml-file-input" onchange="onEmlFileSelected(event)"/>
+        <span id="emlFileName" class="eml-filename"></span>
+        <button id="emlClearBtn" class="eml-clear-btn hidden" onclick="clearEmlFile()" title="Remove file">&#x2715;</button>
+      </div>
+
+      <button class="lookup-btn email-analyze-btn" onclick="runEmailAnalysis()">
+        <span class="btn-text">Analyze</span>
+        <span class="btn-icon">&#x2192;</span>
+      </button>
+    </div>
+
+    <!-- File Analysis toggle -->
+    <div class="email-toggle-row" id="fileToggleRow">
+      <button class="email-toggle-btn" onclick="toggleFileMode()" id="fileToggleBtn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        Analyze File instead
+      </button>
+    </div>
+    <div id="filePanel" class="file-panel hidden">
+      <div class="file-panel-label">Upload a file to extract and score all embedded IOCs</div>
+
+      <label class="file-drop-zone" id="fileDropZone" for="fileInput">
+        <div class="file-drop-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="file-drop-text">Drop file here or <span class="file-drop-link">browse</span></div>
+        <div class="file-drop-hint">PDF &middot; DOCX &middot; PNG &middot; JPG &middot; JPEG &middot; WEBP &middot; TXT &middot; HTML &middot; max 10 MB</div>
+      </label>
+      <input id="fileInput" type="file"
+        accept=".pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.webp,.bmp,.gif,.txt,.html,.htm,.csv,.eml"
+        class="eml-file-input" onchange="onFileSelected(event)"/>
+
+      <div id="fileSelectedRow" class="file-selected-row hidden">
+        <span class="file-selected-icon">📎</span>
+        <span id="fileSelectedName" class="file-selected-name"></span>
+        <span id="fileSelectedSize" class="file-selected-size"></span>
+        <button class="eml-clear-btn" onclick="clearFileSelection()" title="Remove file">&#x2715;</button>
+      </div>
+
+      <div class="file-safe-note">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Safe Processing Mode — file contents are never executed, fetched, or written to disk
+      </div>
+
+      <button class="lookup-btn email-analyze-btn" onclick="runFileAnalysis()" id="fileAnalyzeBtn" disabled>
+        <span class="btn-text">Analyze File</span>
+        <span class="btn-icon">&#x2192;</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Loading (single) -->
+  <div id="loadingState" class="loading-state hidden">
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+      <div class="spinner-ring"></div>
+    </div>
+    <div class="loading-text">Aggregating intelligence<span class="dots"></span></div>
+    <div class="loading-sub">VirusTotal &middot; AbuseIPDB &middot; OTX &middot; DNS &middot; CT Logs</div>
+  </div>
+
+  <!-- Bulk progress -->
+  <div id="bulkProgress" class="bulk-progress hidden">
+    <div class="bulk-progress-header">
+      <span id="bulkProgressLabel" class="bulk-progress-label"></span>
+      <span id="bulkProgressFrac" class="bulk-progress-frac"></span>
+    </div>
+    <div class="bulk-progress-track"><div id="bulkProgressBar" class="bulk-progress-bar"></div></div>
+  </div>
+
+  <!-- Error -->
+  <div id="errorState" class="error-state hidden">
+    <div class="error-icon">&#x26A0;</div>
+    <div class="error-title" id="errorTitle">Error</div>
+    <div class="error-message" id="errorMessage"></div>
+  </div>
+
+  <!-- Bulk results table -->
+  <section id="bulkResultsSection" class="bulk-results-section hidden">
+    <div class="bulk-results-header">
+      <div class="bulk-results-title">Bulk Analysis Results</div>
+      <div class="bulk-summary" id="bulkSummary"></div>
+    </div>
+    <div id="bulkResultsList" class="bulk-results-list"></div>
+  </section>
+
+  <!-- Single results -->
+  <section id="resultsSection" class="results-section hidden">
+
+    <!-- Risk banner -->
+    <div id="riskBanner" class="risk-banner glass-card">
+      <div class="risk-left">
+        <div class="risk-query" id="riskQuery"></div>
+        <div class="risk-meta">
+          <span id="inputTypeChip" class="input-chip"></span>
+          <span id="infraChip" class="infra-chip hidden"></span>
+          <span id="entropyChip" class="entropy-chip hidden"></span>
+          <span id="tldChip" class="tld-chip hidden"></span>
+          <span id="brandChip" class="brand-chip hidden"></span>
+        </div>
+      </div>
+      <div class="risk-right">
+        <div class="risk-score-wrap">
+          <div class="risk-score-label">Risk Score</div>
+          <div id="riskScore" class="risk-score-value">&#x2014;</div>
+        </div>
+        <div id="riskBadge" class="risk-badge">&#x2014;</div>
+      </div>
+    </div>
+
+    <!-- Risk factor pills -->
+    <div id="riskFactors" class="risk-factors-row hidden"></div>
+
+    <!-- Checks executed bar (Single IOC) -->
+    <div id="singleChecksBar" class="hidden"></div>
+
+    <!-- Infra alert -->
+    <div id="infraAlert" class="infra-alert glass-card hidden">
+      <span class="infra-alert-icon">&#x1F3D7;</span>
+      <span id="infraAlertText"></span>
+    </div>
+
+    <!-- Brand alert -->
+    <div id="brandAlert" class="brand-alert glass-card hidden">
+      <span class="brand-alert-icon">&#x26A0;</span>
+      <span id="brandAlertText"></span>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs-container">
+      <div class="tabs-nav" role="tablist">
+        <button class="tab-btn active" role="tab" data-tab="reputation" onclick="switchTab('reputation',this)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Reputation
+        </button>
+        <button class="tab-btn" role="tab" data-tab="dns" onclick="switchTab('dns',this)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          DNS
+        </button>
+        <button class="tab-btn" role="tab" data-tab="infrastructure" onclick="switchTab('infrastructure',this)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          Infrastructure
+        </button>
+        <button class="tab-btn" role="tab" data-tab="breakdown" onclick="switchTab('breakdown',this)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Risk Breakdown
+        </button>
+        <button class="tab-btn" role="tab" data-tab="email" onclick="switchTab('email',this)" id="emailTab" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+          Email Analysis
+        </button>
+        <button class="tab-btn" role="tab" data-tab="file" onclick="switchTab('file',this)" id="fileTab" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          File Analysis
+        </button>
+      </div>
+
+      <div id="tab-reputation"     class="tab-panel active"><div class="services-grid" id="reputationGrid"></div></div>
+      <div id="tab-dns"            class="tab-panel"><div id="dnsContent"       class="dns-content"></div></div>
+      <div id="tab-infrastructure" class="tab-panel"><div id="infraContent"     class="infra-content"></div></div>
+      <div id="tab-breakdown"      class="tab-panel"><div id="breakdownContent" class="breakdown-content"></div></div>
+      <div id="tab-email"          class="tab-panel"><div id="emailContent"     class="email-content"></div></div>
+      <div id="tab-file"           class="tab-panel"><div id="fileContent"      class="email-content"></div></div>
+    </div>
+
+  </section>
+
+</main>
+
+<footer class="app-footer">
+  <span>iRECON &middot; Contextual Infrastructure Intelligence &middot; No data stored, logged, or transmitted beyond API calls</span>
+</footer>
+
+<!-- Scoring Guide Modal -->
+<div id="scoreModal" class="score-modal-overlay hidden" onclick="closeScoreModalOnOverlay(event)">
+  <div class="score-modal glass-card">
+    <div class="score-modal-header">
+      <div class="score-modal-title">&#x2696; How Risk Scores Are Calculated</div>
+      <button class="score-modal-close" onclick="toggleScoreModal()">&#x2715;</button>
+    </div>
+    <div class="score-modal-body">
+      <div class="score-modal-intro">
+        iRECON uses transparent additive scoring. Every point has a labeled reason with no hidden weights.
+        Multiple signals accumulate into a final score capped at 100. A high score warrants further review — it does not confirm malicious intent.
+      </div>
+      <div class="score-severity-row">
+        <div class="sev-chip low-sev">0&ndash;25 &nbsp; LOW</div>
+        <div class="sev-chip medium-sev">26&ndash;60 &nbsp; MEDIUM</div>
+        <div class="sev-chip high-sev">61+ &nbsp; HIGH</div>
+      </div>
+
+      <!-- DOMAIN / URL SIGNALS -->
+      <div class="sf-section-label">Domain &amp; URL Signals</div>
+      <div class="score-factors-table">
+        <div class="sf-row sf-header"><span>Signal</span><span>Points</span></div>
+        <div class="sf-row"><span>Domain age &lt; 30 days</span><span class="sf-pts high">+30</span></div>
+        <div class="sf-row"><span>Domain age 30–90 days</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Domain age 90–180 days</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>High-risk TLD (.xyz .tk .cf .ml .top etc)</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>High-risk TLD + brand / lure / young domain corroboration</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Moderate-risk TLD (.info .biz .click etc)</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>High domain entropy &mdash; possible DGA (&ge;3.80)</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>Moderate domain entropy (3.10&ndash;3.79)</span><span class="sf-pts low">+2</span></div>
+        <div class="sf-row"><span>Low domain entropy (&lt;3.10) &mdash; no signal</span><span class="sf-pts low" style="opacity:.45">+0</span></div>
+        <div class="sf-row"><span>High-entropy subdomain label &mdash; DGA / random (&ge;3.60)</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Moderate-entropy subdomain label (3.10&ndash;3.59)</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>Deep subdomain chain (&ge;3 levels)</span><span class="sf-pts low">+5</span></div>
+      </div>
+
+      <!-- THREAT INTELLIGENCE -->
+      <div class="sf-section-label">Threat Intelligence</div>
+      <div class="score-factors-table">
+        <div class="sf-row sf-header"><span>Signal</span><span>Points</span></div>
+        <div class="sf-row"><span>VirusTotal: 1 engine flagged malicious</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>VirusTotal: 2–4 engines flagged malicious</span><span class="sf-pts high">+25</span></div>
+        <div class="sf-row"><span>VirusTotal: 5–9 engines flagged malicious</span><span class="sf-pts high">+35</span></div>
+        <div class="sf-row"><span>VirusTotal: 10–19 engines flagged malicious</span><span class="sf-pts high">+45</span></div>
+        <div class="sf-row"><span>VirusTotal: 20+ engines flagged malicious</span><span class="sf-pts high">+55</span></div>
+        <div class="sf-row"><span>OTX: recent malware activity (Strong tier)</span><span class="sf-pts high">+20</span></div>
+        <div class="sf-row"><span>OTX: high-risk threat intelligence tags (Suspicious tier)</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>OTX: referenced in threat intelligence (Contextual tier)</span><span class="sf-pts low">+3</span></div>
+        <div class="sf-row"><span>Multi-source corroboration: VT(&ge;5) + OTX</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>Multi-source corroboration: VT(&ge;2) + OTX</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Multi-feed consensus: VT + AbuseIPDB + OTX</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>Redirect chain ends in high-risk infrastructure</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Score elevated: redirects to higher-scoring destination</span><span class="sf-pts med">variable</span></div>
+      </div>
+
+      <!-- IP-SPECIFIC -->
+      <div class="sf-section-label">IP Address Signals</div>
+      <div class="score-factors-table">
+        <div class="sf-row sf-header"><span>Signal</span><span>Points</span></div>
+        <div class="sf-row"><span>AbuseIPDB confidence &gt; 75%</span><span class="sf-pts high">+30</span></div>
+        <div class="sf-row"><span>AbuseIPDB confidence 25–75%</span><span class="sf-pts med">+20</span></div>
+        <div class="sf-row"><span>AbuseIPDB confidence 5–25%</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>AbuseIPDB confidence &lt; 5%</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>TOR exit node detected</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>OTX malware families linked to IP (1 family)</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>OTX malware families linked to IP (2–3 families)</span><span class="sf-pts high">+20</span></div>
+        <div class="sf-row"><span>OTX malware families linked to IP (4+ families)</span><span class="sf-pts high">+30</span></div>
+        <div class="sf-row"><span>Confirmed malware infrastructure (VT&ge;5 + OTX families)</span><span class="sf-pts high">+20</span></div>
+        <div class="sf-row"><span>Ransomware-linked infrastructure (OTX family/tag)</span><span class="sf-pts high">+15</span></div>
+        <div class="sf-row"><span>OTX high pulse activity (&gt;5 pulses)</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Suspicious /24 subnet cluster activity</span><span class="sf-pts med">+12</span></div>
+        <div class="sf-row"><span>Cloud-hosted IP with VT detections</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Infrastructure on commonly abused ASN</span><span class="sf-pts low">+8</span></div>
+      </div>
+
+      <!-- BRAND & PHISHING -->
+      <div class="sf-section-label">Brand &amp; Phishing Infrastructure</div>
+      <div class="score-factors-table">
+        <div class="sf-row sf-header"><span>Signal</span><span>Points</span></div>
+        <div class="sf-row"><span>Brand + CDN hosting + lure keyword (triple signal)</span><span class="sf-pts high">+30</span></div>
+        <div class="sf-row"><span>Multiple brand tokens in hostname (combination impersonation)</span><span class="sf-pts high">+20</span></div>
+        <div class="sf-row"><span>Brand impersonation in subdomain on CDN</span><span class="sf-pts high">+20</span></div>
+        <div class="sf-row"><span>Brand token on known abused hosting platform</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>High-confidence brand impersonation</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>Brand impersonation + fresh TLS cert</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>Brand impersonation confirmed by OTX</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Brand impersonation in subdomain label</span><span class="sf-pts med">+12</span></div>
+        <div class="sf-row"><span>CDN-hosted domain with brand impersonation or VT detections</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>Brand token in subdomain label</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Medium-confidence brand impersonation</span><span class="sf-pts low">+8</span></div>
+        <div class="sf-row"><span>Brand impersonation + high domain entropy</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>Phishing lure keywords in hostname</span><span class="sf-pts low">+8</span></div>
+        <div class="sf-row"><span>Known abused free hosting platform</span><span class="sf-pts low">+8</span></div>
+        <div class="sf-row"><span>Rapid deployment hosting (Netlify, Vercel, ngrok, etc.)</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Multi-signal suspicious infrastructure</span><span class="sf-pts med">+10</span></div>
+      </div>
+
+      <!-- TLS & INFRASTRUCTURE -->
+      <div class="sf-section-label">TLS &amp; Infrastructure</div>
+      <div class="score-factors-table">
+        <div class="sf-row sf-header"><span>Signal</span><span>Points</span></div>
+        <div class="sf-row"><span>TLS certificate &lt; 7 days old</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>TLS certificate &lt; 30 days old</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>Subdomain explosion &gt;25 (CT logs)</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Elevated subdomains &gt;10 (CT logs)</span><span class="sf-pts low">+5</span></div>
+      </div>
+
+      <!-- URL STRUCTURAL HEURISTICS -->
+      <div class="sf-section-label">URL Structural Heuristics</div>
+      <div class="score-factors-table">
+        <div class="sf-row sf-header"><span>Signal</span><span>Points</span></div>
+        <div class="sf-row"><span>Suspicious URL scheme (non-HTTP/S)</span><span class="sf-pts med">+15</span></div>
+        <div class="sf-row"><span>IP address used as URL host</span><span class="sf-pts low">+8</span></div>
+        <div class="sf-row"><span>Double-slash path confusion (//domain in path)</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Brand/domain token embedded in URL path</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Multiple high-risk path keywords (login/verify/secure)</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Suspicious path keyword detected</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>Full URL embedded in query string</span><span class="sf-pts low">+8</span></div>
+        <div class="sf-row"><span>Open-redirect parameter name present</span><span class="sf-pts low">+8</span></div>
+        <div class="sf-row"><span>Percent-encoded parameter sequences</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>Base64-encoded value in query string</span><span class="sf-pts low">+3</span></div>
+        <div class="sf-row"><span>Unusually long URL path (&gt;300 chars)</span><span class="sf-pts low">+5</span></div>
+        <div class="sf-row"><span>Long URL path (&gt;120 chars)</span><span class="sf-pts low">+2</span></div>
+        <div class="sf-row"><span>Long random/hex token in URL path</span><span class="sf-pts low">+3</span></div>
+      </div>
+
+      <!-- FILE HASH -->
+      <div class="sf-section-label">File Hash Signals</div>
+      <div class="score-factors-table">
+        <div class="sf-row sf-header"><span>Signal</span><span>Points</span></div>
+        <div class="sf-row"><span>VirusTotal: low detection count</span><span class="sf-pts med">+20</span></div>
+        <div class="sf-row"><span>VirusTotal: moderate detection count</span><span class="sf-pts high">+40</span></div>
+        <div class="sf-row"><span>VirusTotal: high detection count</span><span class="sf-pts high">+60</span></div>
+        <div class="sf-row"><span>VirusTotal: very high detection count</span><span class="sf-pts high">+80</span></div>
+        <div class="sf-row"><span>Confirmed malware (50+ engines)</span><span class="sf-pts high">+95</span></div>
+        <div class="sf-row"><span>OTX behavioral malware score</span><span class="sf-pts high">up to +30</span></div>
+        <div class="sf-row"><span>OTX malware families identified</span><span class="sf-pts med">up to +20</span></div>
+        <div class="sf-row"><span>OTX high-risk malware classification tags</span><span class="sf-pts med">+10</span></div>
+        <div class="sf-row"><span>Hash referenced in multiple OTX pulses</span><span class="sf-pts med">+15</span></div>
+      </div>
+
+      <div class="score-modal-note">
+        Scores are capped at 100. Signals are additive but mutually exclusive guards prevent double-counting (e.g. brand+CDN+lure triple signal replaces individual components). Redirect chain score elevation overrides the parent URL score when the destination scores higher.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/script.js?v=2.5"></script>
+</body>
+</html>

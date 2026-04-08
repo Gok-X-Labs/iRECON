@@ -1,0 +1,21 @@
+[
+  "urgent", "alert", "immediate", "action", "required", "attention", "notice", "expiration", "expire", "expired",
+  "warning", "suspension", "suspended", "update", "verify", "verification", "validate", "validation", "secure", "security",
+  "confirm", "confirmation", "review", "important", "resolve", "unblock", "unlock", "restricted", "compromised", "disabled",
+  "terminate", "termination", "pending", "invoice", "payment", "bill", "billing", "receipt", "transaction", "charge",
+  "refund", "statement", "balance", "transfer", "funds", "deposit", "withdrawal", "wire", "ach", "settlement",
+  "overdraft", "fee", "unpaid", "overdue", "credit", "debit", "card", "tax", "taxes", "revenue",
+  "customs", "return", "audit", "assessment", "account", "login", "logon", "signin", "password", "passcode",
+  "pin", "credential", "credentials", "access", "profile", "settings", "preference", "recover", "recovery", "reset",
+  "mfa", "otp", "token", "authenticate", "authentication", "session", "payroll", "salary", "wage", "bonus",
+  "compensation", "benefits", "employee", "employer", "staff", "directory", "handbook", "policy", "survey", "appraisal",
+  "evaluation", "severance", "payslip", "stub", "contract", "agreement", "nda", "proposal", "quote", "po",
+  "purchaseorder", "rfp", "vendor", "supplier", "document", "doc", "pdf", "file", "files", "attachment",
+  "shared", "share", "drive", "folder", "spreadsheet", "presentation", "signature", "sign", "signed", "draft",
+  "confidential", "private", "memo", "report", "fax", "efax", "scan", "scanned", "voicemail", "vm",
+  "audio", "transcript", "message", "email", "mail", "inbox", "quota", "limit", "storage", "bounced",
+  "delivery", "undelivered", "notification", "ticket", "request", "inquiry", "support", "helpdesk", "new", "online",
+  "portal", "web", "system", "app", "application", "network", "gateway", "intranet", "extranet", "vpn",
+  "remote", "upgrade", "patch", "maintenance", "cancel", "cancellation", "order", "tracking", "parcel", "shipment",
+  "shipping", "trackingnumber", "trackinginfo", "eform", "compliance", "mandatory", "strict", "info", "final"
+]

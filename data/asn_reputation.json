@@ -1,0 +1,18 @@
+{
+  "high_abuse_asns": [
+    "digitalocean",
+    "linode",
+    "vultr",
+    "choopa",
+    "m247",
+    "hetzner",
+    "ovh",
+    "amazon",
+    "aws",
+    "google",
+    "azure",
+    "microsoft",
+    "alibaba",
+    "tencent"
+  ]
+}

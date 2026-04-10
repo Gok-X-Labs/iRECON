@@ -2234,7 +2234,26 @@ body {
   font-family: var(--font-mono);
   text-align: center;
   z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
 }
+
+.app-footer-built-by {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.app-footer-built-by a {
+  color: var(--cyan);
+  text-decoration: none;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+}
+
+.app-footer-built-by a:hover { opacity: 1; }
 
 /* ── Utilities ───────────────────────────────────────── */
 .hidden { display: none !important; }

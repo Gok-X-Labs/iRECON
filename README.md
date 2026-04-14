@@ -4,9 +4,15 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=flat-square&logo=fastapi&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat-square)
 ![Security](https://img.shields.io/badge/Security-Analyst%20Safe-blue?style=flat-square&logo=shield&logoColor=white)
+![Mode](https://img.shields.io/badge/Mode-Passive%20Analysis-orange?style=flat-square)
+![Platform](https://img.shields.io/badge/Platform-SOC%20Tool-purple?style=flat-square)
+![Maintained](https://img.shields.io/badge/Maintained-Yes-success?style=flat-square)
+
+**Analyze threats without ever touching attacker infrastructure.**  
+Passive, intelligence-driven analysis for SOC teams.
 
 ---
 
@@ -232,6 +238,15 @@ iRECON uses **Bring Your Own API Keys** — your keys, your data, your control.
 - Does not interact with attacker-controlled infrastructure in any way
 - Designed exclusively for **safe, passive, intelligence-driven analysis**
 - Use in conjunction with — not as a replacement for — your existing security stack
+
+---
+
+## License
+
+This project is licensed under the Apache License 2.0.
+
+You are free to use, modify, and distribute this software.
+Contributions are provided under the same license, ensuring long-term openness and legal safety for all users.
 
 ---
 

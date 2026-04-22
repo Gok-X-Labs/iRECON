@@ -620,13 +620,27 @@ async def file_analyze(
     try:
         # Extract artifacts in-memory — Safe Processing guaranteed inside function
         artifacts = extract_file_artifacts(raw_bytes, filename, content_type)
+        # Debug: log what was extracted so server console shows extraction results
+        print(f"[iRECON file] {filename}: "
+              f"urls={len(artifacts.get('urls',[]))} "
+              f"domains={len(artifacts.get('domains',[]))} "
+              f"ips={len(artifacts.get('ips',[]))} "
+              f"qr={len(artifacts.get('qr_urls',[]))}", flush=True)
     finally:
         del raw_bytes   # release immediately after extraction
 
     try:
         scan_result = await scan_artifacts(artifacts)
         result      = await enrich_with_redirect_chains(scan_result)
+        # Debug: log what scan returned so we can confirm UI data is present
+        print(f"[iRECON file] scan done: "
+              f"url_results={len(result.get('url_results',[]))} "
+              f"domain_results={len(result.get('domain_results',[]))} "
+              f"ip_results={len(result.get('ip_results',[]))}", flush=True)
     except Exception as e:
+        import traceback as _tb
+        print(f"[iRECON file] scan ERROR: {e}", flush=True)
+        _tb.print_exc()
         result = {"error": str(e)}
     finally:
         set_session_id(None)

@@ -574,8 +574,10 @@ function renderFileResults(data) {
 
   const container = document.getElementById("fileContent");
   const filename    = data.filename    || "Unknown file";
-  const urlCount    = (data.url_results || []).length;
-  const qrCount     = (data.qr_results  || []).length;
+  const urlCount    = (data.url_results    || []).length;
+  const domCount    = (data.domain_results || []).length;
+  const ipCount     = (data.ip_results     || []).length;
+  const qrCount     = (data.qr_results     || []).length;
   const attUrlCount = (data.attachment_url_results || []).length;
   const totalHigh   = data.total_high   || 0;
   const totalMed    = data.total_medium || 0;
@@ -588,6 +590,8 @@ function renderFileResults(data) {
 
   const statParts = [];
   if (urlCount)    statParts.push(`${urlCount} URL${urlCount!==1?"s":""}`);
+  if (domCount)    statParts.push(`${domCount} domain${domCount!==1?"s":""}`);
+  if (ipCount)     statParts.push(`${ipCount} IP${ipCount!==1?"s":""}`);
   if (qrCount)     statParts.push(`${qrCount} QR code${qrCount!==1?"s":""}`);
   if (attUrlCount) statParts.push(`${attUrlCount} embedded link${attUrlCount!==1?"s":""}`);
 
@@ -611,13 +615,12 @@ function renderFileResults(data) {
   </div>`;
 
   // No artifacts at all
-  const totalResults = urlCount + qrCount + attUrlCount
-    + (data.domain_results||[]).length + (data.ip_results||[]).length
+  const totalResults = urlCount + domCount + ipCount + qrCount + attUrlCount
     + (data.attachment_results||[]).length;
 
   if (totalResults === 0) {
     html += `<div class="infra-detail-card email-art-section" style="color:var(--text-3);font-size:12px;text-align:center;padding:24px;">
-      No URLs or QR codes detected in <strong>${escHtml(filename)}</strong>
+      No URLs, domains, or IPs detected in <strong>${escHtml(filename)}</strong>
     </div>`;
     container.innerHTML = html;
     return;
@@ -645,6 +648,22 @@ function renderFileResults(data) {
     html += `<div class="infra-detail-card email-art-section" style="margin-bottom:10px;">
       <div class="infra-detail-title">URLs</div>
       ${data.url_results.map(_artifactRow).join("")}
+    </div>`;
+  }
+
+  // Domains
+  if (data.domain_results?.length) {
+    html += `<div class="infra-detail-card email-art-section" style="margin-bottom:10px;">
+      <div class="infra-detail-title">Domains</div>
+      ${data.domain_results.map(_artifactRow).join("")}
+    </div>`;
+  }
+
+  // IPs
+  if (data.ip_results?.length) {
+    html += `<div class="infra-detail-card email-art-section" style="margin-bottom:10px;">
+      <div class="infra-detail-title">IP Addresses</div>
+      ${data.ip_results.map(_artifactRow).join("")}
     </div>`;
   }
 

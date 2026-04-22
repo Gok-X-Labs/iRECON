@@ -15,6 +15,29 @@
 Passive, intelligence-driven analysis for SOC teams.
 
 ---
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/CP.png" width="48%" />
+  <img src="screenshots/BA.png" width="48%" />
+</p>
+
+<p align="center">
+  <img src="screenshots/DR.png" width="48%" />
+  <img src="screenshots/EF.png" width="48%" />
+</p>
+
+<p align="center">
+  <img src="screenshots/FA.png" width="48%" />
+  <img src="screenshots/QA.png" width="48%" />
+</p>
+
+<p align="center">
+  <img src="screenshots/HO.png" width="70%" />
+</p>
+---
+
+---
 
 ## What is iRECON?
 

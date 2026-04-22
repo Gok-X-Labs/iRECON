@@ -124,7 +124,32 @@ _ICS_FIELDS = re.compile(
 # ---------------------------------------------------------------------------
 
 _RE_URL    = re.compile(r'https?://[^\s"\'<>\)\]]+', re.IGNORECASE)
-_RE_IP     = re.compile(r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b')
+_RE_DOMAIN_FALLBACK = re.compile(
+    # Matches www.* or domain/path patterns including multi-label TLDs (e.g. vercel.app, co.uk)
+    # Uses (?:[a-zA-Z0-9-]+\.)+ to allow arbitrary label count before the final TLD
+    r'\b(?:www\.)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,6}(?:/[^\s"\'<>\)\]]*)?',
+    re.IGNORECASE
+)
+# IPv4 strict
+_RE_IP = re.compile(
+    r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b'
+)
+_RE_IPV4 = _RE_IP   # alias
+# IPv6: requires ≥3 colon-separated groups or :: to avoid false-positives on
+# timestamps (19:59) and short hex tokens (ab:cd).
+_RE_IPV6 = re.compile(
+    r'(?<![:\w])'
+    r'(?:'
+    r'(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{1,4}'
+    r'|(?:[0-9a-fA-F]{1,4}:){2,6}:'
+    r'|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,5}'
+    r'|[0-9a-fA-F]{1,4}::(?:[0-9a-fA-F]{1,4}:?){0,6}'
+    r'|::(?:ffff(?::0{1,4})?:)?(?:25[0-5]|2[0-4]\d|[01]?\d\d?)(?:\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)){3}'
+    r'|::1'
+    r')'
+    r'(?![:\w])',
+    re.IGNORECASE
+)
 _RE_DOMAIN = re.compile(
     r'\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b'
 )
@@ -134,6 +159,50 @@ _NOISE_IPS = {
     "127.0.0.1", "0.0.0.0", "255.255.255.255",
     "10.0.0.0", "192.168.0.0",
 }
+
+def _is_private_ip(ip: str) -> bool:
+    """
+    Return True for RFC 1918 / reserved ranges (IPv4 and IPv6).
+    These are never threat indicators and must be filtered from IOC lists.
+
+    IPv4 blocked:
+      10.0.0.0/8       — all 10.x.x.x
+      172.16.0.0/12    — 172.16.x.x through 172.31.x.x ONLY
+      192.168.0.0/16   — all 192.168.x.x
+      169.254.0.0/16   — link-local
+      127.x.x.x        — loopback
+
+    IPv6 blocked:
+      ::1              — loopback
+      fc00::/7         — ULA (fc00:: and fd00::)
+      fe80::/10        — link-local (fe80:: through febf::)
+    """
+    if ip in _NOISE_IPS:
+        return True
+    # Strip IPv6 zone ID (e.g. fe80::1%eth0 → fe80::1)
+    ip_clean = ip.split("%")[0].lower()
+    # IPv6 private ranges
+    if ip_clean == "::1":
+        return True
+    if ip_clean.startswith(("fc", "fd")):   # ULA fc00::/7
+        return True
+    if ip_clean.startswith("fe") and len(ip_clean) >= 4:
+        try:
+            second_nibble = int(ip_clean[2], 16)
+            if 8 <= second_nibble <= 11:    # fe80:: through febf:: (link-local)
+                return True
+        except ValueError:
+            pass
+    # IPv4 private ranges
+    if ip.startswith(("10.", "192.168.", "169.254.", "127.")):
+        return True
+    if ip.startswith("172."):
+        try:
+            second = int(ip.split(".")[1])
+            return 16 <= second <= 31
+        except (ValueError, IndexError):
+            return False
+    return False
 _NOISE_DOMAIN_SUFFIXES = (
     "w3.org", "schema.org", "example.com", "example.org", "localhost",
     # Security redirect layers — these appear in body text as substrings of
@@ -153,6 +222,9 @@ _NOISE_TLDS = {
     "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv",
     "zip", "gz", "tar", "rar", "7z",
     "exe", "dll", "bin", "sh", "php", "asp", "aspx", "cfm",
+    # Office template / macro extensions — appear in document metadata
+    "dotm", "dotx", "xlsm", "xltx", "xltm", "pptm", "potx", "potm",
+    "odt", "ods", "odp", "rels", "vsd", "vsdx",
 }
 _HTML_TAG_NAMES = frozenset({
     "div", "span", "li", "ul", "ol", "p", "a", "img", "table",
@@ -167,8 +239,8 @@ _RE_VALID_TLD = re.compile(r'^[a-z]{2,6}$')
 
 # Caps — keep API calls reasonable
 _MAX_URLS    = 10
-_MAX_DOMAINS = 5
-_MAX_IPS     = 5
+_MAX_DOMAINS = 20
+_MAX_IPS     = 20
 _MAX_HASHES  = 5
 
 # Concurrency cap per artifact type.
@@ -501,6 +573,234 @@ def _extract_urls_from_pdf_links(payload: bytes) -> list[str]:
         pass
 
     return urls[:50]
+
+
+def _extract_text_from_pdf(payload: bytes) -> str:
+    """
+    Robust 4-stage PDF text extraction. SAFE: in-memory only, no network calls.
+
+    Stage 1 — pypdf: handles well-formed modern PDFs (correct xref, Object Streams,
+              Unicode fonts). Quality-checked: requires >5 ASCII alnum chars.
+              pypdf returns \\ufffd chars when it fails — those have zero ASCII alnum.
+
+    Stage 2 — FlateDecode multi-strategy decompression: finds every stream…endstream
+              block and tries four zlib variants (standard, raw deflate, skip-header,
+              gzip). Handles PDFs where pypdf fails due to font encoding or structure
+              issues but streams are standard compressed data.
+
+    Stage 2b — PDF operator extraction: for decompressed streams, extracts text
+               inside PDF Tj/TJ/apostrophe operators. Handles PDFs where stream
+               content is decompressed but text is encoded in PDF drawing commands.
+
+    Stage 3 — Raw latin-1 bytes: last resort for uncompressed legacy PDFs.
+
+    All stages are tried in order; first non-empty result wins.
+    """
+    if not payload:
+        return ""
+
+    import sys as _sys_pdf
+
+    # ── Stage 1: pypdf ──────────────────────────────────────────────────────
+    try:
+        try:
+            from pypdf import PdfReader as _PdfReader
+        except ImportError:
+            try:
+                from PyPDF2 import PdfReader as _PdfReader
+            except ImportError:
+                _PdfReader = None
+        if _PdfReader is not None:
+            reader = _PdfReader(BytesIO(payload))
+            parts = []
+            for page in reader.pages:
+                try:
+                    parts.append(page.extract_text() or "")
+                except Exception:
+                    pass
+            pdf_text = "\n".join(parts)
+            ascii_count = sum(1 for c in pdf_text[:500] if c.isascii() and c.isalnum())
+            if ascii_count > 5:
+                return pdf_text
+    except Exception as _e1:
+        print(f"[iRECON pdf] Stage1 EXCEPTION: {_e1}", file=_sys_pdf.stderr, flush=True)
+
+    # ── Stage 2: FlateDecode stream decompression ───────────────────────────
+    # Try all zlib variants so we handle standard zlib, raw deflate, and gzip.
+    import zlib as _zlib_pdf
+
+    def _try_decompress(data: bytes) -> bytes:
+        for fn in (
+            lambda d: _zlib_pdf.decompress(d),
+            lambda d: _zlib_pdf.decompress(d, wbits=-15),   # raw deflate
+            lambda d: _zlib_pdf.decompress(d[2:], wbits=-15),  # skip 2-byte header
+            lambda d: _zlib_pdf.decompress(d, wbits=47),    # gzip
+        ):
+            try:
+                result = fn(data)
+                if result:
+                    return result
+            except Exception:
+                pass
+        return b""
+
+    def _extract_pdf_operators(text: str) -> str:
+        """Extract text from PDF Tj / TJ / apostrophe operators."""
+        parts = []
+        # (text) Tj  or  (text) '
+        parts += re.findall(r'\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*(?:Tj|\')', text)
+        # [(text) kern ...] TJ
+        for m in re.finditer(r'\[([^\]]+)\]\s*TJ', text):
+            parts += re.findall(r'\(([^)\\]*(?:\\.[^)\\]*)*)\)', m.group(1))
+        return " ".join(p for p in parts if p.strip())
+
+    def _parse_cmap(cmap_text: str) -> dict:
+        """Parse a PDF CMap stream and return CID→char mapping."""
+        mapping = {}
+        for src, dst in re.findall(r'<([0-9A-Fa-f]+)>\s+<([0-9A-Fa-f]+)>', cmap_text):
+            try:
+                mapping[int(src, 16)] = chr(int(dst, 16))
+            except Exception:
+                pass
+        return mapping
+
+    def _decode_hex_cid(stream_text: str, cmap: dict) -> str:
+        """
+        Decode <XXXX>Tj hex CID glyph sequences using a CMap.
+        Splits on BT...ET text blocks so each line of text gets a newline
+        separator — without this all words merge into one unspaced string
+        which breaks URL/domain/IP regex matching.
+        """
+        # Split the stream into individual BT...ET text blocks
+        # Each block is one positioned run of text (one line/word)
+        bt_et_blocks = re.findall(r'BT\b(.*?)\bET', stream_text, re.DOTALL)
+        if bt_et_blocks:
+            lines = []
+            for block in bt_et_blocks:
+                chars = [cmap.get(int(h, 16), '') for h in re.findall(r'<([0-9A-Fa-f]+)>', block)]
+                line = ''.join(chars).strip()
+                if line:
+                    lines.append(line)
+            result = '\n'.join(lines)
+        else:
+            # Fallback: no BT/ET structure, decode all hex values with spaces
+            chars = [cmap.get(int(h, 16), '') for h in re.findall(r'<([0-9A-Fa-f]+)>\s*Tj', stream_text)]
+            result = ''.join(chars)
+        return result
+
+    try:
+        # First pass: collect all decompressed stream texts AND identify CMap streams
+        _stream_re = re.compile(rb'stream[ \t]*\r?\n(.*?)\r?\nendstream', re.DOTALL)
+        text_parts = []
+        cmap_streams = []    # decoded CMap text for hex CID resolution
+        raw_streams  = []    # (raw_bytes, decoded_text) for all streams
+        stream_count = 0
+
+        for m in _stream_re.finditer(payload):
+            stream_count += 1
+            raw_stream = m.group(1)
+            decompressed = _try_decompress(raw_stream)
+            if not decompressed:
+                decompressed = raw_stream   # try uncompressed
+            if not decompressed:
+                continue
+            try:
+                decoded = decompressed.decode("utf-8", errors="replace")
+            except Exception:
+                decoded = decompressed.decode("latin-1", errors="replace")
+            raw_streams.append((raw_stream, decoded))
+            # Identify CMap streams (contain begincmap / beginbfchar)
+            if 'begincmap' in decoded or 'beginbfchar' in decoded:
+                cmap_streams.append(decoded)
+
+        # Build combined CMap from all CMap streams found
+        combined_cmap: dict = {}
+        for cmap_text in cmap_streams:
+            combined_cmap.update(_parse_cmap(cmap_text))
+
+        # Second pass: extract text from content streams
+        for _raw, decoded in raw_streams:
+            # Skip CMap and binary font streams
+            if 'begincmap' in decoded or 'beginbfchar' in decoded:
+                continue
+
+            # Detect CIDFont hex-encoded streams FIRST before plain text check.
+            # CIDFont streams contain <XXXX>Tj patterns and must be decoded via
+            # the CMap — the raw operator syntax has alnum chars (BT, Tj, cm etc.)
+            # but contains no readable text that regex can match.
+            _has_hex_cid = bool(re.search(r'<[0-9A-Fa-f]{4}>', decoded))
+
+            if not _has_hex_cid:
+                alnum_count = sum(1 for c in decoded[:300] if c.isascii() and c.isalnum())
+                # Plain text content (not PDF-operator encoded)
+                if alnum_count > 3:
+                    text_parts.append(decoded)
+                    continue
+                # Try PDF plain-text Tj operators: (text) Tj
+                op_text = _extract_pdf_operators(decoded)
+                if op_text and sum(1 for c in op_text[:200] if c.isascii() and c.isalnum()) > 3:
+                    text_parts.append(op_text)
+                    continue
+
+            # Hex CID decoding via CMap (handles CIDFont / Type0 fonts)
+            if combined_cmap and _has_hex_cid:
+                cid_text = _decode_hex_cid(decoded, combined_cmap)
+                if cid_text and sum(1 for c in cid_text if c.isascii() and c.isalnum()) > 3:
+                    text_parts.append(cid_text)
+
+        if text_parts:
+            return "\n".join(text_parts)
+    except Exception as _e2:
+        print(f"[iRECON pdf] Stage2 EXCEPTION: {_e2}", flush=True)
+
+    # ── Stage 3: raw latin-1 bytes ──────────────────────────────────────────
+    try:
+        raw_text = payload.decode("latin-1", errors="replace")
+        return raw_text
+    except Exception:
+        return ""
+
+
+def _extract_text_from_office(payload: bytes) -> str:
+    """
+    Extract all visible text from a DOCX/XLSX/PPTX file by parsing the
+    XML content files inside the ZIP archive.
+
+    Reads word/document.xml, xl/sharedStrings.xml, ppt/slides/slide*.xml,
+    word/header*.xml, word/footer*.xml, etc. — strips XML tags, returns
+    plain text. This captures URLs, domains, and IPs written as plain text
+    in the document body, which .rels hyperlink extraction misses entirely.
+
+    SAFE: in-memory ZIP parsing, no network calls.
+    """
+    if not payload:
+        return ""
+    import re as _re
+    try:
+        import zipfile as _zf
+        with _zf.ZipFile(BytesIO(payload)) as zf:
+            names = zf.namelist()
+            # XML content files that contain visible text — not _rels or [Content_Types]
+            targets = [
+                n for n in names
+                if n.endswith(".xml") and "_rels" not in n
+                and not n.startswith("[")
+                and any(n.startswith(pfx) for pfx in (
+                    "word/", "xl/", "ppt/", "docProps/"
+                ))
+            ]
+            parts = []
+            for name in targets:
+                try:
+                    xml = zf.read(name).decode("utf-8", errors="replace")
+                    # Strip all XML tags, preserve text content
+                    text = _re.sub(r"<[^>]+>", " ", xml)
+                    parts.append(text)
+                except Exception:
+                    pass
+            return "\n".join(parts)
+    except Exception:
+        return ""
 
 
 def _extract_urls_from_txt_attachment(payload: bytes) -> list[str]:
@@ -1016,30 +1316,13 @@ def _extract_display_link_mismatches(html: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def extract_file_artifacts(payload: bytes, filename: str, content_type: str) -> dict:
-    """
-    Extract IOC artifacts from a raw uploaded file.
-
-    Treats the file as a "synthetic email attachment" and builds the same
-    artifacts dict that extract_artifacts() produces — so it can be passed
-    directly into scan_artifacts() and enrich_with_redirect_chains() without
-    any changes to the scoring pipeline.
-
-    Supported file types:
-      PDF  — annotation hyperlinks + raw byte regex scan (catches button links)
-      DOCX/XLSX/PPTX — hyperlinks from .rels XML (existing _extract_office_artifacts)
-      PNG/JPG/JPEG/WEBP — QR code scanning (existing _extract_qr_urls)
-      TXT/HTML/HTM/CSV/EML — regex + BeautifulSoup href extraction
-
-    SAFE: all operations purely in-memory; no URLs fetched; no files written.
-    Returns the standard artifacts dict ready for scan_artifacts().
-    """
     fname_lc = (filename or "").lower()
     ct       = (content_type or "").lower()
 
-    url_sources: list[str] = []   # raw URLs before unwrapping
-    qr_sources:  list[dict] = []  # QR-decoded payloads
+    url_sources: list[str] = []
+    qr_sources:  list[dict] = []
+    _content_text = ""
 
-    # ── QR scanning — images and PDFs ────────────────────────────────────────
     _img_exts = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff")
     _pdf_exts = (".pdf",)
 
@@ -1047,40 +1330,93 @@ def extract_file_artifacts(payload: bytes, filename: str, content_type: str) -> 
         if _QR_AVAILABLE:
             for u in _extract_qr_urls(payload):
                 qr_sources.append({"url": u, "file": filename, "kind": "qr"})
+
     elif ct == "application/pdf" or fname_lc.endswith(_pdf_exts):
-        # PDF QR scanning
         if _PDF_QR_AVAILABLE:
             for u in _extract_qr_urls_from_pdf(payload):
                 qr_sources.append({"url": u, "file": filename, "kind": "qr"})
-        # PDF hyperlink + regex extraction (always runs)
+        # Annotation hyperlinks (/URI objects)
         url_sources.extend(_extract_urls_from_pdf_links(payload))
+        # Full text extraction: pypdf → FlateDecode decompress → raw bytes fallback
+        # _extract_text_from_pdf always returns the best available text.
+        _content_text = _extract_text_from_pdf(payload)
+
     elif fname_lc.endswith((".docx", ".xlsx", ".pptx")):
-        # Office Open XML — extract from .rels files
         _office = _extract_office_artifacts(payload, filename)
         for u in _office["urls"]:
             url_sources.append(u)
         for u in _office["qr_urls"]:
             qr_sources.append({"url": u, "file": filename, "kind": "qr"})
+        _content_text = _extract_text_from_office(payload)
+
     elif fname_lc.endswith((".doc", ".xls", ".ppt")):
-        # Legacy OLE2 — QR scanning from embedded images only
         if _QR_AVAILABLE:
             for img in _extract_images_from_binary(payload):
                 for u in _extract_qr_urls(img):
                     qr_sources.append({"url": u, "file": filename, "kind": "qr"})
+
     else:
-        # TXT, HTML, EML, CSV — regex + BeautifulSoup
+        _content_text = payload.decode("utf-8", errors="replace")
         url_sources.extend(_extract_urls_from_txt_attachment(payload))
 
-    # Regex fallback on raw bytes — catches anything the type-specific
-    # extractor may have missed (e.g. URLs in PDF stream content).
-    # Only runs when no URLs were found yet to avoid duplicates.
+    # ✅ FIXED BLOCK (correct indentation)
+    if _content_text:
+        # Track spans already covered by _RE_URL to avoid double-counting
+        _url_spans = [(m.start(), m.end()) for m in _RE_URL.finditer(_content_text)]
+        for m in _RE_URL.finditer(_content_text):
+            u = m.group(0).rstrip(".,;)>\"'/\\")
+            if u and len(u) > 10:
+                url_sources.append(u)
+
+        for m in _RE_DOMAIN_FALLBACK.finditer(_content_text):
+            u = m.group(0).rstrip(".,;)>\"'/\\")
+            if not u or len(u) <= 5:
+                continue
+            # Skip if this span is already inside a full https?:// URL match
+            if any(s <= m.start() < e for s, e in _url_spans):
+                continue
+            # Guard: skip noise TLDs (e.g. Normal.dotm, file.rels)
+            _u_tld = u.rsplit(".", 1)[-1].split("/")[0].lower()
+            if _u_tld in _NOISE_TLDS:
+                continue
+            # Route: only add to url_sources when the match has a path or www prefix.
+            # Bare domains (e.g. "walmart.com") are already captured by the
+            # standalone domain extraction block below — adding them here as well
+            # routes them through URL unwrapping (wrong pipeline) and causes them to
+            # appear as URL results with source="Email Body" instead of Domains.
+            _has_path = "/" in u
+            _has_www  = u.lower().startswith("www.")
+            if _has_path or _has_www:
+                url_sources.append(u)
+            # else: bare domain — handled by _RE_DOMAIN pass in domain block below
+
+        # IPs from content text — do NOT add to url_sources (wrong pipeline).
+        # They are captured cleanly by the dedicated _RE_IP pass in the IP block.
+
     if not url_sources:
         try:
             text = payload.decode("latin-1", errors="replace")
+            _url_spans_fb = [(m.start(), m.end()) for m in _RE_URL.finditer(text)]
+
             for m in _RE_URL.finditer(text):
                 u = m.group(0).rstrip(".,;)>\"'/\\")
                 if u and len(u) > 10:
                     url_sources.append(u)
+
+            for m in _RE_DOMAIN_FALLBACK.finditer(text):
+                u = m.group(0).rstrip(".,;)>\"'/\\")
+                if not u or len(u) <= 5:
+                    continue
+                if any(s <= m.start() < e for s, e in _url_spans_fb):
+                    continue
+                _u_tld = u.rsplit(".", 1)[-1].split("/")[0].lower()
+                if _u_tld in _NOISE_TLDS:
+                    continue
+                _has_path = "/" in u
+                _has_www  = u.lower().startswith("www.")
+                if _has_path or _has_www:
+                    url_sources.append(u)
+
         except Exception:
             pass
 
@@ -1116,6 +1452,61 @@ def extract_file_artifacts(payload: bytes, filename: str, content_type: str) -> 
             seen_qr.add(key)
             norm_qr.append(item)
 
+    # ── Decode file text for domain + IP regex passes ────────────────────────
+    # Use _content_text if we extracted real document text above (PDF/Office/TXT).
+    # Fall back to latin-1 decoded raw bytes only for types without text extraction.
+    from urllib.parse import unquote as _unquote_fa
+    if _content_text:
+        _file_text = _content_text
+    else:
+        try:
+            _file_text_raw = payload.decode("latin-1", errors="replace")
+            _file_text     = _unquote_fa(_file_text_raw, errors="replace")
+        except Exception:
+            _file_text = ""
+
+    # ── Standalone domains ────────────────────────────────────────────────────
+    # Seed with hostnames already captured in url_hosts/url_score_extra so the
+    # same infrastructure is never double-scored (once as URL, once as domain).
+    _url_hostnames: set[str] = set()
+    for _u in url_hosts + url_score_extra:
+        _h = _normalise_url_to_domain(_u)
+        if _h:
+            _url_hostnames.add(_h)
+
+    _all_domains: set[str] = set()
+    for _d in _RE_DOMAIN.findall(_file_text):
+        _d = _d.rstrip(".").lower()
+        if len(_d) < 4 or "." not in _d:
+            continue
+        _tld = _d.rsplit(".", 1)[-1]
+        if not _RE_VALID_TLD.match(_tld):
+            continue
+        if _tld in _NOISE_TLDS:
+            continue
+        _first = _d.split(".")[0]
+        if _first in _HTML_TAG_NAMES:
+            continue
+        if re.match(r'^[0-9a-f]{2}$', _first, re.IGNORECASE):
+            continue
+        if any(_d.endswith(_n) for _n in _NOISE_DOMAIN_SUFFIXES):
+            continue
+        _all_domains.add(_d)
+
+    unique_domains = sorted(_all_domains - _url_hostnames)[:_MAX_DOMAINS]
+
+    # ── IPs (IPv4 + IPv6) ────────────────────────────────────────────────────
+    _seen_ips: set[str] = set()
+    unique_ips: list[str] = []
+    for _ip in _RE_IPV4.findall(_file_text) + _RE_IPV6.findall(_file_text):
+        _ip = _ip.split("%")[0]   # strip IPv6 zone IDs (e.g. fe80::1%eth0)
+        if _is_private_ip(_ip):
+            continue
+        if _ip not in _seen_ips:
+            _seen_ips.add(_ip)
+            unique_ips.append(_ip)
+    unique_ips = unique_ips[:_MAX_IPS]
+
     # ── Build SHA-256 hash for the file itself ────────────────────────────────
     import hashlib as _hashlib
     file_hash = _hashlib.sha256(payload).hexdigest()
@@ -1135,15 +1526,14 @@ def extract_file_artifacts(payload: bytes, filename: str, content_type: str) -> 
         "url_score_extra":        url_score_extra,
         "raw_urls":               url_display,
         "url_gateway_map":        url_gateway_map,
-        "domains":                [],          # no standalone domain extraction for files
-        "ips":                    [],
+        "domains":                unique_domains,   # standalone domains from file text
+        "ips":                    unique_ips,        # IPs from file text
         "attachments":            attachments,
         "mismatches":             [],
         "qr_urls":                norm_qr[:_MAX_URLS],
         "ics_urls":               [],
-        "attachment_url_sources": [],          # already merged into url_hosts above
-        # Metadata consumed by scan_artifacts for UI labelling
-        "_file_analysis":         True,        # flag: renders as File Analysis not Email
+        "attachment_url_sources": [],
+        "_file_analysis":         True,
         "_filename":              filename,
     }
 
@@ -1265,12 +1655,12 @@ def extract_artifacts(msg: Message) -> dict:
     # to avoid double-scoring the same infrastructure.
     unique_domains = sorted(all_domains - url_hostnames)[:_MAX_DOMAINS]
 
-    # ── IPs ─────────────────────────────────────────────────────────────────
-    raw_ips = _RE_IP.findall(full_text)
+    # ── IPs (IPv4 + IPv6) ────────────────────────────────────────────────────
     seen_ips: set[str] = set()
     unique_ips: list[str] = []
-    for ip in raw_ips:
-        if ip in _NOISE_IPS or ip.startswith(("10.", "192.168.", "172.")):
+    for ip in _RE_IPV4.findall(full_text) + _RE_IPV6.findall(full_text):
+        ip = ip.split("%")[0]   # strip IPv6 zone IDs
+        if _is_private_ip(ip):
             continue
         if ip not in seen_ips:
             seen_ips.add(ip)
@@ -1850,19 +2240,21 @@ async def scan_artifacts(artifacts: dict) -> dict:
     url_res = url_res + url_extra_res
 
     # Annotate domain results — extracted from body text
+    _is_file_analysis = artifacts.get("_file_analysis", False)
+    _file_source_label = artifacts.get("_filename", "") or "Uploaded File"
     for res in dom_res:
-        res["source"] = "Email Body"
+        res["source"] = "" if _is_file_analysis else "Email Body"
 
     # Annotate IP results
     for res in ip_res:
-        res["source"] = "Email Body"
+        res["source"] = "" if _is_file_analysis else "Email Body"
 
     # Annotate URL results — ioc IS the unwrapped URL; raw_url is the original
     # If gateway wrapping was detected, record it for UI display.
     _gw_map     = artifacts.get("url_gateway_map", {})
     _gw_map_inv = {v: k for k, v in _gw_map.items()}  # unwrapped → original
     for res in url_res:
-        res["source"]  = "Email Body"
+        res["source"]  = "" if _is_file_analysis else "Email Body"
         res["raw_url"] = res["ioc"]   # unwrapped URL (what was scored)
         original = _gw_map_inv.get(res["ioc"])
         if original:

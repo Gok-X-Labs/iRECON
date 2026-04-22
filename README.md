@@ -73,6 +73,61 @@ iRECON **never** contacts attacker infrastructure under any circumstance.
 
 ---
 
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10 or higher
+- pip
+- **Poppler** (required only for QR code detection in PDFs)
+  - **Windows:** Download from [oschwartz10612/poppler-windows](https://github.com/oschwartz10612/poppler-windows/releases), extract, and add the `bin\` folder to your system `PATH`
+  - **Ubuntu/Debian:** `sudo apt install poppler-utils`
+  - **macOS:** `brew install poppler`
+
+### Installation
+
+**1. Clone the repository**
+```bash
+git clone https://github.com/Gok-X-Labs/iRECON.git
+cd iRECON
+```
+
+**2. Create and activate a virtual environment** *(recommended)*
+```bash
+# Windows
+python -m venv venv
+venv\Scripts\activate
+
+# macOS / Linux
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**3. Install dependencies**
+```bash
+pip install -r requirements.txt
+```
+
+**4. Run iRECON**
+```bash
+python main.py
+```
+
+**5. Open in your browser**
+http://127.0.0.1:8000
+
+**6. Create an analyst profile**
+
+Click the **profile badge** in the top-right corner → **Create Profile** → enter your API keys. iRECON will save your profile locally and you're ready to analyze.
+
+---
+
+> **Free API tiers are sufficient for most SOC workflows.**
+> Get keys at: [VirusTotal](https://www.virustotal.com/gui/join-us) · [OTX AlienVault](https://otx.alienvault.com) · [AbuseIPDB](https://www.abuseipdb.com/register) · [URLScan.io](https://urlscan.io/user/signup)
+
+---
+
+
 ## Features
 
 ### Email Analysis

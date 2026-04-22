@@ -17,9 +17,14 @@ Passive, intelligence-driven analysis for SOC teams.
 ---
 ## Screenshots
 
+
+<p align="center">
+  <img src="screenshots/HO.jpeg" width="70%" />
+</p>
+
 <p align="center">
   <img src="screenshots/CP.png" width="48%" />
-  <img src="screenshots/BA.png" width="48%" />
+  <img src="screenshots/FA.png" width="48%" />
 </p>
 
 <p align="center">
@@ -28,12 +33,8 @@ Passive, intelligence-driven analysis for SOC teams.
 </p>
 
 <p align="center">
-  <img src="screenshots/FA.png" width="48%" />
+  <img src="screenshots/BA.png" width="48%" />
   <img src="screenshots/QA.png" width="48%" />
-</p>
-
-<p align="center">
-  <img src="screenshots/HO.jpeg" width="70%" />
 </p>
 
 ---

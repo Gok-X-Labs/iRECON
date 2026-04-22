@@ -33,7 +33,7 @@ Passive, intelligence-driven analysis for SOC teams.
 </p>
 
 <p align="center">
-  <img src="screenshots/HO.png" width="70%" />
+  <img src="screenshots/HO.jpeg" width="70%" />
 </p>
 ---
 

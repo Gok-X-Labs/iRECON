@@ -206,18 +206,18 @@ Click the **profile badge** in the top-right corner → **Create Profile** → e
 
 ## Scoring Model
 
-```
+\```
 Score Range:  0 – 100
-Thresholds:   0–25  → LOW        (informational)
-              26–60 → MEDIUM     (needs review)
-              61–85 → HIGH       (suspicious)
-              86–100 → MALICIOUS  (confirmed threat indicators)
-```
+Thresholds:   0–25  → LOW     (Low Threat)
+              26–60 → MEDIUM  (Needs Review)
+              61–100 → HIGH   (Likely / Highly Malicious)
+\```
 
 - Additive model — each signal contributes independently
 - No single factor determines the verdict
 - All contributing factors are listed with their point values
 - Score is capped at 100 — no inflation from redundant signals
+- HIGH verdict is further qualified as **Likely Malicious** or **Highly Malicious** based on confirmed TI detections
 
 ---
 

@@ -206,12 +206,12 @@ Click the **profile badge** in the top-right corner → **Create Profile** → e
 
 ## Scoring Model
 
-\```
+```
 Score Range:  0 – 100
 Thresholds:   0–25  → LOW     (Low Threat)
               26–60 → MEDIUM  (Needs Review)
               61–100 → HIGH   (Likely / Highly Malicious)
-\```
+```
 
 - Additive model — each signal contributes independently
 - No single factor determines the verdict
